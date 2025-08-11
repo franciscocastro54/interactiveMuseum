@@ -1,0 +1,59 @@
+[
+  {
+    "title": "Realidad mixta + IA",
+    "description": "Proyecto educativo que genera reseñas de libros en tiempo real.",
+    "image": "./videos/vrIAXS.mp4"
+  },
+  {
+    "title": "Simuladores educativos",
+    "description": "Desarrollo de experiencias educativas en entornos inmersivos.",
+    "image": "./videos/simuladorVR.mp4"
+  },
+  {
+    "title": "Creación de páginas web",
+    "description": "Desarrollo de páginas web comerciales.",
+    "image": "./images/webPage.png",
+    "link": "https://propiedadesyparcelasenpirque.cl/"
+  },
+  {
+    "title": "Páginas 3D interactivas",
+    "description": "Creación de proyectos 3D web optimizados compatibles en celulares y PC.",
+    "image": "./images/mineJS.png",
+    "link": "https://franciscocastro54.github.io/mine_threejs/"
+  },
+  {
+    "title": "Aplicación de mapas militares",
+    "description": "Creación de aplicación de análisis estratégico de mapas militares georreferenciados.",
+    "image": "./images/Mapas_Ejercito.jpg",
+    "link": "https://www.infodefensa.com/texto-diario/mostrar/4736688/ejercito-chile-s2t-comparten-experiencias-capacidades-georreferenciacion-realidad-virtual"
+  },
+  {
+    "title": "Desarrollador Fullstack",
+    "description": "mail: francisco.castro.init@gmail.com",
+    "image": "./images/fidae.jpg",
+    "link": "mailto:francisco.castro.init@gmail.com"
+  },
+  {
+    "title": "Desarrollador XR/VR/AR/web",
+    "description": "wsp: +569 35232158",
+    "image": "./images/innovapolinav2023.jpg",
+    "link": "https://wa.me/qr/YVUYGP57W7L3B1"
+  },
+  {
+    "title": "Desarrollador y docente",
+    "description": "LinkedIn: https://linkedin.com/in/francisco-castro-zuleta",
+    "image": "./images/jsConf.jpeg",
+    "link": "https://linkedin.com/in/francisco-castro-zuleta"
+  },
+  {
+    "title": "Portafolio, versión anterior",
+    "description": "Versión preliminar de portafolio, usando texturas y técnicas de optimización.",
+    "image": "./images/portafolio_V01.png",
+    "link": "https://franciscocastro54.github.io/portafolio3D/"
+  },
+  {
+    "title": "Créditos modelo Meta Quest 3",
+    "description": "Meta Quest 3 (https://skfb.ly/oNCEG) by Elin is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).",
+    "image": "./images/credits_metaQuest.png"
+  }
+]
