@@ -13,9 +13,9 @@
   <script type="importmap">
     {
       "imports": {
-        "three": "../build/three.webgpu.js",
-        "three/webgpu": "../build/three.webgpu.js",
-        "three/tsl": "../build/three.tsl.js",
+        "three": "./build/three.webgpu.js",
+        "three/webgpu": "./build/three.webgpu.js",
+        "three/tsl": "./build/three.tsl.js",
         "three/addons/": "./jsm/"
       }
     }
@@ -134,7 +134,7 @@
     // ===== Galería (cards) =====
     const GALLERY = new THREE.Group(); scene.add(GALLERY);
 
-    const WALL = { position: new THREE.Vector3(0, 3, -6), normal: new THREE.Vector3(0,0,1), width: 80, height: 6, margin: 0.002 };
+    const WALL = { position: new THREE.Vector3(0, 3, -6), normal: new THREE.Vector3(0,0,1), width: 90, height: 6, margin: 0.002 };
     function wallFrame(normal){ const n=normal.clone().normalize(); const up=Math.abs(n.y)>0.95?new THREE.Vector3(0,0,1):new THREE.Vector3(0,1,0); const u=new THREE.Vector3().crossVectors(up,n).normalize(); const v=new THREE.Vector3().crossVectors(n,u).normalize(); return {u,v,n}; }
     function wallQuat(normal){ const {u,v,n}=wallFrame(normal); const m=new THREE.Matrix4().makeBasis(u,v,n); return new THREE.Quaternion().setFromRotationMatrix(m); }
     const WALL_FRAME = wallFrame(WALL.normal);
