@@ -762,5 +762,202 @@ function createCardMesh(baseCanvas, aspect, heightMeters, meta) {
       await loadRotatingModel();
     })();
   </script>
+
+<!-- ===== Mobile Controls (floating joystick + look zone + run) ===== -->
+<style>
+  #mobileControls{ position:fixed; inset:0; pointer-events:none; z-index:300; }
+  #mobileControls.hidden{ display:none; }
+  #mobileControls .joy{
+    position:fixed; width:120px; height:120px; left:4vw; bottom:7vw;
+    border-radius:50%; background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.18); backdrop-filter: blur(2px);
+    pointer-events:auto; touch-action:none;
+  }
+  #mobileControls .joy .knob{
+    position:absolute; width:54px; height:54px; left:50%; top:50%;
+    transform:translate(-50%,-50%); border-radius:50%;
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.28);
+  }
+  #btnRun.mobBtn{
+    position:fixed; bottom:7vw; right:6vw; padding:12px 14px;
+    border-radius:16px; background:rgba(30,144,255,.88);
+    color:#fff; font-size:14px; border:none; pointer-events:auto; touch-action:manipulation;
+  }
+  #btnRun[aria-pressed="true"]{ background:rgba(0,180,90,.9); }
+  #lookZone { position:fixed; right:0; top:0; bottom:0; width:52vw; pointer-events:auto; touch-action:none; }
+  @media (pointer:fine){ #mobileControls{ display:none !important; } }
+</style>
+
+<div id="mobileControls" class="hidden" aria-label="Controles móviles">
+  <div id="joyL" class="joy"><div class="knob"></div></div>
+  <button id="btnRun" class="mobBtn" aria-pressed="false">Correr</button>
+  <div id="lookZone" aria-label="Área de mirada"></div>
+</div>
+
+<script>
+(function(){
+  // Safeguards for globals expected by the app
+  window.keys = window.keys || {};
+  window.updateLocomotion = window.updateLocomotion || function(){};
+  const controls = window.controls || null;
+  const renderer = window.renderer || null;
+
+  // Only enable on touch devices
+  const isMobile = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  const mobileUI = document.getElementById('mobileControls');
+  if (!isMobile || !mobileUI) return;
+  mobileUI.classList.remove('hidden');
+
+  if (controls) {
+    if ('enablePan' in controls) controls.enablePan = false;
+    if ('enableRotate' in controls) controls.enableRotate = true;
+  }
+
+  const joyEl   = document.getElementById('joyL');
+  const knob    = joyEl.querySelector('.knob');
+  const btnRun  = document.getElementById('btnRun');
+  const lookEl  = document.getElementById('lookZone');
+
+  const DEAD = 0.25;           // joystick deadzone
+  const MAX  = 54;             // knob radius in px
+  let JOY_ACTIVE = false;
+  let LOOK_ACTIVE = false;
+  let lastLookX = 0, lastLookY = 0;
+  let lastRunTap = 0;
+  let MOBILE_STICKY_RUN = false;
+
+  const vibe = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch(e){} };
+  const setKeyName = (name, val) => {
+    if (window.keys[name] === val) return;
+    window.keys[name] = val;
+    window.updateLocomotion();
+  };
+
+  // Floating joystick
+  const placeKnob = (cx, cy, x, y) => {
+    let dx = x - cx, dy = y - cy;
+    const d = Math.hypot(dx, dy);
+    if (d > MAX) { const k = MAX / d; dx *= k; dy *= k; }
+    knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    const nx = dx / MAX, ny = dy / MAX;
+
+    setKeyName('w', ny < -DEAD);
+    setKeyName('s', ny >  DEAD);
+    setKeyName('a', nx < -DEAD);
+    setKeyName('d', nx >  DEAD);
+
+    if (!MOBILE_STICKY_RUN) {
+      const mag = Math.hypot(nx, ny);
+      setKeyName('shift', mag > 0.85);
+    }
+  };
+
+  const startJoy = (clientX, clientY) => {
+    if (clientX > innerWidth * 0.48) return; // left half only
+    JOY_ACTIVE = true;
+    const size = joyEl.getBoundingClientRect();
+    const left = Math.max(10, Math.min(clientX - size.width / 2, innerWidth - size.width - 10));
+    const top  = Math.max(10, Math.min(clientY - size.height / 2, innerHeight - size.height - 10));
+    joyEl.style.left = left + 'px';
+    joyEl.style.top  = top + 'px';
+    const cx = left + size.width / 2;
+    const cy = top  + size.height / 2;
+    knob.dataset.cx = String(cx);
+    knob.dataset.cy = String(cy);
+  };
+  const moveJoy = (clientX, clientY) => {
+    if (!JOY_ACTIVE) return;
+    const cx = parseFloat(knob.dataset.cx), cy = parseFloat(knob.dataset.cy);
+    placeKnob(cx, cy, clientX, clientY);
+  };
+  const endJoy = () => {
+    if (!JOY_ACTIVE) return;
+    JOY_ACTIVE = false;
+    knob.style.transform = 'translate(0px,0px)';
+    setKeyName('w', false); setKeyName('s', false);
+    setKeyName('a', false); setKeyName('d', false);
+    if (!MOBILE_STICKY_RUN) setKeyName('shift', false);
+  };
+
+  window.addEventListener('touchstart', (e)=>{
+    const t = e.changedTouches[0]; startJoy(t.clientX, t.clientY);
+  }, {passive:false});
+  window.addEventListener('touchmove', (e)=>{
+    const t = e.changedTouches[0]; moveJoy(t.clientX, t.clientY);
+  }, {passive:false});
+  window.addEventListener('touchend',  (e)=>{ endJoy(); }, {passive:false});
+  window.addEventListener('touchcancel',(e)=>{ endJoy(); }, {passive:false});
+
+  // Run button (hold + double-tap toggle)
+  const setRunUI = () => {
+    btnRun.setAttribute('aria-pressed', String(MOBILE_STICKY_RUN || window.keys.shift));
+    btnRun.textContent = (MOBILE_STICKY_RUN || window.keys.shift) ? 'Corriendo' : 'Correr';
+  };
+  const pressRun = (lock=false) => {
+    if (lock) MOBILE_STICKY_RUN = !MOBILE_STICKY_RUN;
+    window.keys.shift = (MOBILE_STICKY_RUN || true);
+    window.updateLocomotion(); setRunUI(); vibe(10);
+  };
+  const releaseRun = () => {
+    if (!MOBILE_STICKY_RUN) { window.keys.shift = false; window.updateLocomotion(); }
+    setRunUI();
+  };
+  btnRun.addEventListener('touchstart', (e)=>{
+    const now = performance.now();
+    if (now - lastRunTap < 300) { pressRun(true); }
+    else { pressRun(false); }
+    lastRunTap = now; e.preventDefault();
+  }, {passive:false});
+  btnRun.addEventListener('touchend',   (e)=>{ releaseRun(); e.preventDefault(); }, {passive:false});
+  btnRun.addEventListener('touchcancel',(e)=>{ releaseRun(); e.preventDefault(); }, {passive:false});
+
+  // Look zone: rotate camera by dragging on right half
+  const ROT_SENS = 0.0032;
+  lookEl.addEventListener('touchstart', (e)=>{
+    const t = e.changedTouches[0];
+    LOOK_ACTIVE = true; lastLookX = t.clientX; lastLookY = t.clientY;
+    e.preventDefault();
+  }, {passive:false});
+  lookEl.addEventListener('touchmove', (e)=>{
+    if (!LOOK_ACTIVE) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - lastLookX;
+    const dy = t.clientY - lastLookY;
+    lastLookX = t.clientX; lastLookY = t.clientY;
+    if (controls && controls.rotateLeft && controls.rotateUp) {
+      controls.rotateLeft(dx * ROT_SENS);
+      controls.rotateUp(dy * ROT_SENS);
+      controls.update && controls.update();
+    }
+    e.preventDefault();
+  }, {passive:false});
+  const endLook = (e)=>{ if (!LOOK_ACTIVE) return; LOOK_ACTIVE = false; e.preventDefault(); };
+  lookEl.addEventListener('touchend', endLook,   {passive:false});
+  lookEl.addEventListener('touchcancel', endLook,{passive:false});
+
+  setRunUI();
+
+  // Tap to open card links (if your app exposes these globals)
+  if (renderer && renderer.domElement) {
+    renderer.domElement.addEventListener('touchend', (e)=>{
+      try {
+        const t = e.changedTouches[0];
+        const r = renderer.domElement.getBoundingClientRect();
+        if (window.G_PTR) {
+          window.G_PTR.x = ((t.clientX - r.left)/r.width)*2 - 1;
+          window.G_PTR.y = -((t.clientY - r.top)/r.height)*2 + 1;
+          if (window.G_HOVER && typeof window.hitButton === 'function' && window.hitButton(window.G_HOVER)) {
+            if (window.G_HOVER.userData && window.G_HOVER.userData.link) {
+              window.open(window.G_HOVER.userData.link, '_blank', 'noopener');
+            }
+          }
+        }
+      } catch(err){ /* ignore */ }
+    }, {passive:false});
+  }
+})();
+</script>
+<!-- ===== End Mobile Controls ===== -->
+
 </body>
 </html>
