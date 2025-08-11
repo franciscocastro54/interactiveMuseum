@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Cards con video en sección (ReadyPlayerMe + Three.js WebGPU)</title>
+  <title>Portafolio interactivo | Francisco Castro Zuleta | VR AR IA</title>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
   <style>
@@ -161,24 +161,27 @@
     function isVideoRenderable(video) {
       return !!video && video.videoWidth > 0 && video.readyState === HTMLMediaElement.HAVE_ENOUGH_DATA && !video.paused && !video.ended;
     }
-    function attachVideoMap(group) {
-      const vMesh = group?.userData?.videoMesh;
-      const vTex  = group?.userData?.videoTexture;
-      if (!vMesh || !vTex) return;
-      if (!group.userData.videoMapAttached) {
-        vMesh.material.map = vTex; // no destruimos nada, sólo reasignamos
-        group.userData.videoMapAttached = true;
-      }
-    }
-    function detachVideoMap(group) {
-      const vMesh = group?.userData?.videoMesh;
-      if (!vMesh) return;
-      if (group.userData.videoMapAttached) {
-        // en vez de null, usamos un placeholder estable para evitar destruir recursos en vuelo
-        vMesh.material.map = FALLBACK_TEX;
-        group.userData.videoMapAttached = false;
-      }
-    }
+function attachVideoMap(group) {
+  const vMesh = group?.userData?.videoMesh;
+  const vTex  = group?.userData?.videoTexture;
+  if (!vMesh || !vTex) return;
+  if (!group.userData.videoMapAttached) {
+    vMesh.material.map = vTex;
+    vMesh.material.needsUpdate = true;   // <---
+    group.userData.videoMapAttached = true;
+  }
+}
+
+function detachVideoMap(group) {
+  const vMesh = group?.userData?.videoMesh;
+  if (!vMesh) return;
+  if (group.userData.videoMapAttached) {
+    vMesh.material.map = FALLBACK_TEX;   // usa tu 1x1 transparente
+    vMesh.material.needsUpdate = true;   // <---
+    group.userData.videoMapAttached = false;
+  }
+}
+
     function registerVideoEvents(group) {
       const video = group?.userData?.videoElement;
       if (!video) return;
@@ -329,57 +332,104 @@
     }
 
     // Crea el mesh de la tarjeta + marco, y si es video añade un plano hijo con VideoTexture
-    function createCardMesh(baseCanvas, aspect, heightMeters, meta){
-      const { canvasSize, buttonRect, mediaRect, isVideo, video } = meta;
-      const widthMeters = heightMeters * aspect;
+function createCardMesh(baseCanvas, aspect, heightMeters, meta) {
+  const { canvasSize, buttonRect, mediaRect, isVideo, video } = meta;
+  const widthMeters = heightMeters * aspect;
 
-      // Material de la tarjeta (CanvasTexture)
-      const tex = new THREE.CanvasTexture(baseCanvas);
-      tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = true; tex.needsUpdate = true;
-      const cardMat = new THREE.MeshPhysicalMaterial({ map: tex, transparent: true, roughness: 0.6 });
-      const cardGeo = new THREE.PlaneGeometry(widthMeters, heightMeters);
-      const card = new THREE.Mesh(cardGeo, cardMat); card.position.z = 0.011;
+  // --- Material de la tarjeta (CanvasTexture)
+  const tex = new THREE.CanvasTexture(baseCanvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.needsUpdate = true;
 
-      // Marco
-      const plate = new THREE.Mesh(
-        new THREE.BoxGeometry(widthMeters + 0.06*2, heightMeters + 0.06*2, 0.02),
-        new THREE.MeshPhysicalMaterial({ color: 0x2a2d36, roughness: 0.85, metalness: 0.04 })
-      );
+  const cardMat = new THREE.MeshPhysicalMaterial({
+    map: tex,
+    transparent: true,
+    roughness: 0.6,
+  });
 
-      const group = new THREE.Group(); group.add(plate); group.add(card);
-      group.userData.card = card;
-      group.userData.canvasSize = canvasSize;
-      group.userData.buttonRect = buttonRect;
-      group.userData.cardTexture = tex;
+  const cardGeo = new THREE.PlaneGeometry(widthMeters, heightMeters);
+  const card = new THREE.Mesh(cardGeo, cardMat);
+  card.position.z = 0.011;
 
-      if (isVideo && video && mediaRect){
-        const vw = widthMeters * (mediaRect.w / canvasSize.w);
-        const vh = heightMeters * (mediaRect.h / canvasSize.h);
-        const cx = widthMeters * (-0.5 + (mediaRect.x + mediaRect.w/2) / canvasSize.w);
-        const cy = heightMeters * ( 0.5 - (mediaRect.y + mediaRect.h/2) / canvasSize.h );
+  // --- Marco
+  const plate = new THREE.Mesh(
+    new THREE.BoxGeometry(widthMeters + 0.06 * 2, heightMeters + 0.06 * 2, 0.02),
+    new THREE.MeshPhysicalMaterial({ color: 0x2a2d36, roughness: 0.85, metalness: 0.04 })
+  );
 
-        const vGeo = new THREE.PlaneGeometry(vw, vh);
-        const vTex = new THREE.VideoTexture(video);
-        vTex.colorSpace = THREE.SRGBColorSpace;
-        vTex.minFilter = THREE.LinearFilter; vTex.magFilter = THREE.LinearFilter;
-        vTex.generateMipmaps = false;
+  const group = new THREE.Group();
+  group.add(plate);
+  group.add(card);
 
-        const vMat = new THREE.MeshBasicMaterial({ map: vTex, toneMapped: false });
-        const vMesh = new THREE.Mesh(vGeo, vMat);
-        vMesh.position.set(cx, cy, 0.0125);
-        group.add(vMesh);
+  group.userData.card = card;
+  group.userData.canvasSize = canvasSize;
+  group.userData.buttonRect = buttonRect;
+  group.userData.cardTexture = tex;
 
-        // Guardamos referencias y un flag para reconectar map de forma segura
-        group.userData.videoMesh = vMesh;
-        group.userData.videoTexture = vTex;
-        group.userData.videoMapAttached = true;
-        group.userData.videoElement = video;
-        // Registrar listeners para conectar/desconectar el map según estado del video
-        registerVideoEvents(group);
-      }
+  // --- Contenido de video embebido en la tarjeta
+  if (isVideo && video && mediaRect) {
+    const vw = widthMeters * (mediaRect.w / canvasSize.w);
+    const vh = heightMeters * (mediaRect.h / canvasSize.h);
+    const cx = widthMeters * (-0.5 + (mediaRect.x + mediaRect.w / 2) / canvasSize.w);
+    const cy = heightMeters * (0.5 - (mediaRect.y + mediaRect.h / 2) / canvasSize.h);
 
-      return group;
-    }
+    const vGeo = new THREE.PlaneGeometry(vw, vh);
+
+    // Textura de video
+    const vTex = new THREE.VideoTexture(video);
+    vTex.colorSpace = THREE.SRGBColorSpace;
+    vTex.minFilter = THREE.LinearFilter;
+    vTex.magFilter = THREE.LinearFilter;
+    vTex.generateMipmaps = false;
+
+    // Material del plano de video (sin tone mapping)
+    const vMat = new THREE.MeshBasicMaterial({ toneMapped: false, transparent: true });
+    const vMesh = new THREE.Mesh(vGeo, vMat);
+    vMesh.position.set(cx, cy, 0.0125);
+    group.add(vMesh);
+
+    // Fallback 1x1 transparente (cacheado globalmente)
+    const FALLBACK_TEX =
+      window.__FALLBACK_TEX__ ||
+      (window.__FALLBACK_TEX__ = (() => {
+        const c = document.createElement('canvas');
+        c.width = c.height = 1;
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.minFilter = THREE.LinearFilter;
+        t.magFilter = THREE.LinearFilter;
+        t.generateMipmaps = false;
+        t.needsUpdate = true;
+        return t;
+      })());
+
+    // ¿El video es renderizable ahora?
+    const attachNow =
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      !video.paused &&
+      !video.ended &&
+      video.videoWidth > 0 &&
+      video.videoHeight > 0;
+
+    // Adjuntamos vTex solo si es seguro; si no, usamos fallback
+    vMat.map = attachNow ? vTex : FALLBACK_TEX;
+    vMat.needsUpdate = true;
+
+    // Guardamos referencias/flags para el loop y los listeners
+    group.userData.videoMesh = vMesh;
+    group.userData.videoTexture = vTex;
+    group.userData.videoElement = video;
+    group.userData.videoMapAttached = attachNow;
+    group.userData.fallbackTex = FALLBACK_TEX; // por si tus helpers prefieren tomarlo desde el group
+
+    // Registrar listeners para conectar/desconectar el map según estado del video
+    registerVideoEvents(group);
+  }
+
+  return group;
+}
+
 
     // Posiciones de ejemplo en la pared
     const GALLERY_PLACES = [ {x:-28,y:-0.1,h:3.5},{x:-21,y:-0.1,h:3.5},{x:-14,y:-0.1,h:3.5},{x:-7,y:-0.1,h:3.5}, {x:0,y:-0.1,h:3.5}, {x:7,y:-0.1,h:3.5},{x:14,y:-0.1,h:3.5},{x:21,y:-0.1,h:3.5},{x:28,y:-0.1,h:3.5},{x:35,y:-0.1,h:2} ];
