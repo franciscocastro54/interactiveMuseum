@@ -9,6 +9,30 @@
     body { margin: 0; overflow: hidden; background: #000; }
     #help { position: fixed; left: 12px; bottom: 12px; color: #fff; font: 12px/1.45 system-ui, sans-serif; background: rgba(0,0,0,.35); padding: 10px 12px; border-radius: 8px; backdrop-filter: blur(6px); }
     #help kbd { background: rgba(255,255,255,.15); padding: 2px 6px; border-radius: 4px; }
+    /* === Mobile controls === */
+    #mobileControls { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+    #mobileControls.hidden { display:none; }
+
+    .joy {
+      position: absolute; width: 140px; height: 140px; border-radius: 50%;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
+      pointer-events: auto; touch-action: none; backdrop-filter: blur(6px);
+    }
+    .joy .knob {
+      position: absolute; left: 50%; top: 50%;
+      width: 64px; height: 64px; margin-left:-32px; margin-top:-32px;
+      border-radius: 50%; background: rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.25);
+    }
+
+    #joyL { left: 16px; bottom: 16px; }
+    #joyR { right: 16px; bottom: 16px; }
+
+    .mobBtn {
+      position: absolute; right: 24px; bottom: 180px; pointer-events: auto; touch-action: manipulation;
+      background: rgba(0,128,255,.25); color: #fff; border: 1px solid rgba(255,255,255,.25);
+      padding: 10px 14px; border-radius: 10px; font-weight: 600; backdrop-filter: blur(6px);
+    }
+
   </style>
   <script type="importmap">
     {
@@ -28,6 +52,13 @@
     <div><kbd>A</kbd>/<kbd>D</kbd> girar continuamente</div>
     <div>Click en "Visitar" abre el link</div>
   </div>
+
+  <div id="mobileControls" class="hidden">
+  <div id="joyL" class="joy"><div class="knob"></div></div>
+  <div id="joyR" class="joy"><div class="knob"></div></div>
+  <button id="btnRun" class="mobBtn">RUN</button>
+</div>
+
 
   <script type="module">
     import * as THREE from 'three';
@@ -500,6 +531,87 @@
     function decide() { if(keys.w && keys.shift && actions['Run']) return 'Run'; if(keys.w && actions['Walk']) return 'Walk'; if(keys.s && actions['Backwards']) return 'Backwards'; return 'Idle'; }
     function updateLocomotion(){ const next=decide(); if(next!==current && actions[next]) crossFade(next,0.18); }
     function crossFade(name,dur=0.25){ const prev=actions[current], next=actions[name]; if(!next) return; if(prev && prev!==next) prev.crossFadeTo(next,dur,false); next.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play(); current=name; }
+
+// ===== Controles móviles =====
+const isMobile = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const $mc = document.getElementById('mobileControls');
+if (isMobile) {
+  $mc.classList.remove('hidden');
+
+  // (opcional) evita conflictos con OrbitControls en móvil
+  if (typeof controls !== 'undefined' && controls) {
+    controls.enablePan = false;
+    // Si el pinch-zoom te molesta, descomenta:
+    // controls.enableZoom = false;
+  }
+
+  const setMobileKey = (name, val) => {
+    if (keys[name] !== val) { keys[name] = val; updateLocomotion?.(); }
+  };
+
+  const makeJoystick = (elem, onMove) => {
+    const knob = elem.querySelector('.knob');
+    let active = false, cx = 0, cy = 0;
+    const MAX = 50;
+
+    const place = (x, y) => {
+      let dx = x - cx, dy = y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d > MAX) { const k = MAX / d; dx *= k; dy *= k; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      onMove({ x: dx / MAX, y: dy / MAX, active });
+    };
+
+    const start = e => {
+      active = true;
+      const t = e.changedTouches[0];
+      const r = elem.getBoundingClientRect();
+      cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+      place(t.clientX, t.clientY);
+      e.preventDefault();
+    };
+    const move = e => { if (!active) return;
+      const t = e.changedTouches[0]; place(t.clientX, t.clientY); e.preventDefault();
+    };
+    const end = e => { if (!active) return;
+      active = false; knob.style.transform = `translate(0px,0px)`; onMove({ x:0, y:0, active:false }); e.preventDefault();
+    };
+
+    elem.addEventListener('touchstart', start, { passive:false });
+    window.addEventListener('touchmove',  move,  { passive:false });
+    window.addEventListener('touchend',   end,   { passive:false });
+    window.addEventListener('touchcancel',end,   { passive:false });
+  };
+
+  // Izquierdo: avanzar/retroceder (W/S) y freno
+  makeJoystick(document.getElementById('joyL'), v => {
+    setMobileKey('w', v.y < -0.25);
+    setMobileKey('s', v.y >  0.25);
+    // si quieres que el eje X también mueva lateral (no rotación), añade:
+    // setMobileKey('a', v.x < -0.35);
+    // setMobileKey('d', v.x >  0.35);
+  });
+
+  // Derecho: rotación del avatar (A/D)
+  makeJoystick(document.getElementById('joyR'), v => {
+    setMobileKey('a', v.x < -0.25);
+    setMobileKey('d', v.x >  0.25);
+  });
+
+  // Botón RUN (mantener pulsado = Shift)
+  const btnRun = document.getElementById('btnRun');
+  const press = e => { setMobileKey('shift', true); e.preventDefault(); };
+  const release = e => { setMobileKey('shift', false); e.preventDefault(); };
+  btnRun.addEventListener('touchstart', press,   { passive:false });
+  btnRun.addEventListener('touchend',   release, { passive:false });
+  btnRun.addEventListener('touchcancel',release, { passive:false });
+
+  // Ya que hay joysticks, no necesitamos WASD visuales de escritorio
+  const help = document.getElementById('help'); if (help) help.style.display = 'none';
+}
+
+
+
 
     // ====== Gestión segura de VideoTexture (evita ExternalTexture inactiva) ======
     function tickGalleryVideos() {
