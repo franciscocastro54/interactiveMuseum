@@ -56,5 +56,11 @@
     "title": "Créditos modelo Meta Quest 3",
     "description": "Meta Quest 3 (https://skfb.ly/oNCEG) by Elin is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).",
     "image": "./images/credits_metaQuest.png"
+  },
+  {
+    "title": "Imagen de fondo original",
+    "description": "Diseñado por Freepik",
+    "image": "./images/background_original.png",
+    "link": "https://www.freepik.es/vector-gratis/paisaje-otono-acuarela_20287828.htm#fromView=keyword&page=1&position=0&uuid=7b25857b-0ee8-4789-8a88-e059c7fb23c4&query=Pintura+Paisaje"
   }
 ]

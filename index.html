@@ -100,10 +100,23 @@
 
     // ===== Escena base =====
     scene = new THREE.Scene();
-    scene.backgroundNode = screenUV.x.mix(color(0x10131d), color(0x221634)).add(screenUV.distance(vec2(0.5, 1.0)).oneMinus().mul(color(0x0c5d68)));
-    scene.add(new THREE.HemisphereLight(0x99aaff, 0x223344, 6));
-    const key = new THREE.DirectionalLight(0xffffff, 6); key.position.set(3, 6, 3); scene.add(key);
-    const rim = new THREE.DirectionalLight(0x88bbff, 4); rim.position.set(-3, 5, -4); scene.add(rim);
+
+    // *** INTEGRACIÓN EQUIRECTANGULAR ***
+    // Carga una textura 360° y úsala como fondo + environment para reflejos PBR
+    const textureLoader = new THREE.TextureLoader();
+    const textureEquirec = textureLoader.load('./images/paisajeAcuarela.png', () => {
+      // Forzar un primer render tras la carga para evitar un frame negro
+      renderer && renderer.render(scene, camera);
+    });
+    textureEquirec.mapping = THREE.EquirectangularReflectionMapping;
+    textureEquirec.colorSpace = THREE.SRGBColorSpace;
+    scene.background = textureEquirec;   // fondo 360
+    scene.environment = textureEquirec;  // iluminación/reflejos para MeshStandard/Physical
+
+    // Iluminación complementaria suave (puedes reducir intensidades si el environment es brillante)
+    scene.add(new THREE.HemisphereLight(0x99aaff, 0x223344, 2.5));
+    const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(3, 6, 3); scene.add(key);
+    const rim = new THREE.DirectionalLight(0x88bbff, 2.0); rim.position.set(-3, 5, -4); scene.add(rim);
 
     camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 200);
     camera.position.set(0, 2.6, 6);
@@ -115,7 +128,6 @@
     document.body.appendChild(renderer.domElement);
 
     // Fallback 1x1 transparente para cuando el video no sea renderizable
-    // (evita destruir una textura usada por el encoder/submit en WebGPU)
     const FALLBACK_TEX = new THREE.DataTexture(new Uint8Array([0,0,0,0]), 1, 1);
     FALLBACK_TEX.needsUpdate = true;
 
@@ -125,7 +137,7 @@
       const reflMask = positionWorld.xz.distance(0).mul(.08).clamp().oneMinus();
       const floorMat = new THREE.NodeMaterial();
       floorMat.colorNode = vec4(refl.rgb, reflMask);
-      floorMat.opacity = .2; floorMat.transparent = true;
+      floorMat.opacity = .9; floorMat.transparent = true;
       const floor = new THREE.Mesh(new THREE.BoxGeometry(60, .002, 60), floorMat);
       floor.position.y = 0; floor.receiveShadow = true; scene.add(floor);
     }
@@ -139,7 +151,7 @@
     // Cubo demo
     let cube; {
       const g = new THREE.BoxGeometry(2,1.1,2);
-      const m = new THREE.MeshStandardMaterial({ color: 0x00aaff, metalness: 0.1, roughness: 0.6 });
+      const m = new THREE.MeshStandardMaterial({ color: 0xDEE1A8, metalness: 0.4, roughness: 0.35 });
       cube = new THREE.Mesh(g,m); cube.position.set(1.2,0.5,1); scene.add(cube);
     }
 
@@ -161,26 +173,25 @@
     function isVideoRenderable(video) {
       return !!video && video.videoWidth > 0 && video.readyState === HTMLMediaElement.HAVE_ENOUGH_DATA && !video.paused && !video.ended;
     }
-function attachVideoMap(group) {
-  const vMesh = group?.userData?.videoMesh;
-  const vTex  = group?.userData?.videoTexture;
-  if (!vMesh || !vTex) return;
-  if (!group.userData.videoMapAttached) {
-    vMesh.material.map = vTex;
-    vMesh.material.needsUpdate = true;   // <---
-    group.userData.videoMapAttached = true;
-  }
-}
-
-function detachVideoMap(group) {
-  const vMesh = group?.userData?.videoMesh;
-  if (!vMesh) return;
-  if (group.userData.videoMapAttached) {
-    vMesh.material.map = FALLBACK_TEX;   // usa tu 1x1 transparente
-    vMesh.material.needsUpdate = true;   // <---
-    group.userData.videoMapAttached = false;
-  }
-}
+    function attachVideoMap(group) {
+      const vMesh = group?.userData?.videoMesh;
+      const vTex  = group?.userData?.videoTexture;
+      if (!vMesh || !vTex) return;
+      if (!group.userData.videoMapAttached) {
+        vMesh.material.map = vTex;
+        vMesh.material.needsUpdate = true;
+        group.userData.videoMapAttached = true;
+      }
+    }
+    function detachVideoMap(group) {
+      const vMesh = group?.userData?.videoMesh;
+      if (!vMesh) return;
+      if (group.userData.videoMapAttached) {
+        vMesh.material.map = FALLBACK_TEX;
+        vMesh.material.needsUpdate = true;
+        group.userData.videoMapAttached = false;
+      }
+    }
 
     function registerVideoEvents(group) {
       const video = group?.userData?.videoElement;
@@ -231,7 +242,7 @@ function detachVideoMap(group) {
     // pared visible opcional
     {
       const pg = new THREE.PlaneGeometry(WALL.width, WALL.height);
-      const pm = new THREE.MeshStandardMaterial({ color: 0x171a20, roughness: 0.95 });
+      const pm = new THREE.MeshStandardMaterial({ color: 0xDEE1A8, roughness: 0.3 });
       const plane = new THREE.Mesh(pg, pm); plane.quaternion.copy(WALL_QUAT); plane.position.copy(WALL.position); scene.add(plane);
     }
 
@@ -277,7 +288,7 @@ function detachVideoMap(group) {
       const { type, media, width: mw, height: mh } = mediaRes;
 
       const PX=1024, PADDING=32, TITLE=70, DESC=40, GAP=18;
-      const BG='#101014', FG='#eaeaea', SUB='#b8c2cc';
+      const BG='#55571E', FG='#eaeaea', SUB='#b8c2cc';
       const maxW = PX - PADDING*2;
 
       const c=document.createElement('canvas');
@@ -321,8 +332,8 @@ function detachVideoMap(group) {
       let buttonRect=null;
       if (HAS_LINK){
         const bx=Math.floor((PX-BTN_W)/2), by=yImg+drawH+BTN_GAP;
-        roundRect(ctx,bx,by,BTN_W,BTN_H,BTN_RADIUS,'#2563eb');
-        ctx.fillStyle='#fff'; ctx.font=`700 42px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        roundRect(ctx,bx,by,BTN_W,BTN_H,BTN_RADIUS,'#DEE1A8');
+        ctx.fillStyle='#333512'; ctx.font=`700 42px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
         ctx.textBaseline='middle'; ctx.textAlign='center'; ctx.fillText('Visitar', bx+BTN_W/2, by+BTN_H/2);
         buttonRect={x:bx,y:by,w:BTN_W,h:BTN_H};
       }
@@ -332,107 +343,89 @@ function detachVideoMap(group) {
     }
 
     // Crea el mesh de la tarjeta + marco, y si es video añade un plano hijo con VideoTexture
-function createCardMesh(baseCanvas, aspect, heightMeters, meta) {
-  const { canvasSize, buttonRect, mediaRect, isVideo, video } = meta;
-  const widthMeters = heightMeters * aspect;
+    function createCardMesh(baseCanvas, aspect, heightMeters, meta) {
+      const { canvasSize, buttonRect, mediaRect, isVideo, video } = meta;
+      const widthMeters = heightMeters * aspect;
 
-  // --- Material de la tarjeta (CanvasTexture)
-  const tex = new THREE.CanvasTexture(baseCanvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.generateMipmaps = true;
-  tex.needsUpdate = true;
+      // --- Material de la tarjeta (CanvasTexture)
+      const tex = new THREE.CanvasTexture(baseCanvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.generateMipmaps = true;
+      tex.needsUpdate = true;
 
-  const cardMat = new THREE.MeshPhysicalMaterial({
-    map: tex,
-    transparent: true,
-    roughness: 0.6,
-  });
+      const cardMat = new THREE.MeshPhysicalMaterial({
+        map: tex,
+        transparent: true,
+        roughness: 0.6,
+      });
 
-  const cardGeo = new THREE.PlaneGeometry(widthMeters, heightMeters);
-  const card = new THREE.Mesh(cardGeo, cardMat);
-  card.position.z = 0.011;
+      const cardGeo = new THREE.PlaneGeometry(widthMeters, heightMeters);
+      const card = new THREE.Mesh(cardGeo, cardMat);
+      card.position.z = 0.011;
 
-  // --- Marco
-  const plate = new THREE.Mesh(
-    new THREE.BoxGeometry(widthMeters + 0.06 * 2, heightMeters + 0.06 * 2, 0.02),
-    new THREE.MeshPhysicalMaterial({ color: 0x2a2d36, roughness: 0.85, metalness: 0.04 })
-  );
+      // --- Marco
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(widthMeters + 0.06 * 2, heightMeters + 0.06 * 2, 0.02),
+        new THREE.MeshPhysicalMaterial({ color: 0x55571E, roughness: 0.85, metalness: 0.04 })
+      );
 
-  const group = new THREE.Group();
-  group.add(plate);
-  group.add(card);
+      const group = new THREE.Group();
+      group.add(plate);
+      group.add(card);
 
-  group.userData.card = card;
-  group.userData.canvasSize = canvasSize;
-  group.userData.buttonRect = buttonRect;
-  group.userData.cardTexture = tex;
+      group.userData.card = card;
+      group.userData.canvasSize = canvasSize;
+      group.userData.buttonRect = buttonRect;
+      group.userData.cardTexture = tex;
 
-  // --- Contenido de video embebido en la tarjeta
-  if (isVideo && video && mediaRect) {
-    const vw = widthMeters * (mediaRect.w / canvasSize.w);
-    const vh = heightMeters * (mediaRect.h / canvasSize.h);
-    const cx = widthMeters * (-0.5 + (mediaRect.x + mediaRect.w / 2) / canvasSize.w);
-    const cy = heightMeters * (0.5 - (mediaRect.y + mediaRect.h / 2) / canvasSize.h);
+      // --- Contenido de video embebido en la tarjeta
+      if (isVideo && video && mediaRect) {
+        const vw = widthMeters * (mediaRect.w / canvasSize.w);
+        const vh = heightMeters * (mediaRect.h / canvasSize.h);
+        const cx = widthMeters * (-0.5 + (mediaRect.x + mediaRect.w / 2) / canvasSize.w);
+        const cy = heightMeters * (0.5 - (mediaRect.y + mediaRect.h / 2) / canvasSize.h);
 
-    const vGeo = new THREE.PlaneGeometry(vw, vh);
+        const vGeo = new THREE.PlaneGeometry(vw, vh);
 
-    // Textura de video
-    const vTex = new THREE.VideoTexture(video);
-    vTex.colorSpace = THREE.SRGBColorSpace;
-    vTex.minFilter = THREE.LinearFilter;
-    vTex.magFilter = THREE.LinearFilter;
-    vTex.generateMipmaps = false;
+        // Textura de video
+        const vTex = new THREE.VideoTexture(video);
+        vTex.colorSpace = THREE.SRGBColorSpace;
+        vTex.minFilter = THREE.LinearFilter;
+        vTex.magFilter = THREE.LinearFilter;
+        vTex.generateMipmaps = false;
 
-    // Material del plano de video (sin tone mapping)
-    const vMat = new THREE.MeshBasicMaterial({ toneMapped: false, transparent: true });
-    const vMesh = new THREE.Mesh(vGeo, vMat);
-    vMesh.position.set(cx, cy, 0.0125);
-    group.add(vMesh);
+        // Material del plano de video (sin tone mapping)
+        const vMat = new THREE.MeshBasicMaterial({ toneMapped: false, transparent: true });
+        const vMesh = new THREE.Mesh(vGeo, vMat);
+        vMesh.position.set(cx, cy, 0.0125);
+        group.add(vMesh);
 
-    // Fallback 1x1 transparente (cacheado globalmente)
-    const FALLBACK_TEX =
-      window.__FALLBACK_TEX__ ||
-      (window.__FALLBACK_TEX__ = (() => {
-        const c = document.createElement('canvas');
-        c.width = c.height = 1;
-        const t = new THREE.CanvasTexture(c);
-        t.colorSpace = THREE.SRGBColorSpace;
-        t.minFilter = THREE.LinearFilter;
-        t.magFilter = THREE.LinearFilter;
-        t.generateMipmaps = false;
-        t.needsUpdate = true;
-        return t;
-      })());
+        // ¿El video es renderizable ahora? Si no, usamos fallback
+        const attachNow =
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          !video.paused &&
+          !video.ended &&
+          video.videoWidth > 0 &&
+          video.videoHeight > 0;
 
-    // ¿El video es renderizable ahora?
-    const attachNow =
-      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-      !video.paused &&
-      !video.ended &&
-      video.videoWidth > 0 &&
-      video.videoHeight > 0;
+        vMat.map = attachNow ? vTex : FALLBACK_TEX;
+        vMat.needsUpdate = true;
 
-    // Adjuntamos vTex solo si es seguro; si no, usamos fallback
-    vMat.map = attachNow ? vTex : FALLBACK_TEX;
-    vMat.needsUpdate = true;
+        // Guardamos referencias/flags para el loop y los listeners
+        group.userData.videoMesh = vMesh;
+        group.userData.videoTexture = vTex;
+        group.userData.videoElement = video;
+        group.userData.videoMapAttached = attachNow;
 
-    // Guardamos referencias/flags para el loop y los listeners
-    group.userData.videoMesh = vMesh;
-    group.userData.videoTexture = vTex;
-    group.userData.videoElement = video;
-    group.userData.videoMapAttached = attachNow;
-    group.userData.fallbackTex = FALLBACK_TEX; // por si tus helpers prefieren tomarlo desde el group
+        // Registrar listeners para conectar/desconectar el map según estado del video
+        registerVideoEvents(group);
+      }
 
-    // Registrar listeners para conectar/desconectar el map según estado del video
-    registerVideoEvents(group);
-  }
-
-  return group;
-}
-
+      return group;
+    }
 
     // Posiciones de ejemplo en la pared
-    const GALLERY_PLACES = [ {x:-28,y:-0.1,h:3.5},{x:-21,y:-0.1,h:3.5},{x:-14,y:-0.1,h:3.5},{x:-7,y:-0.1,h:3.5}, {x:0,y:-0.1,h:3.5}, {x:7,y:-0.1,h:3.5},{x:14,y:-0.1,h:3.5},{x:21,y:-0.1,h:3.5},{x:28,y:-0.1,h:3.5},{x:35,y:-0.1,h:2} ];
+    const GALLERY_PLACES = [ {x:-35,y:-0.1,h:3.5},{x:-28,y:-0.1,h:3.5},{x:-21,y:-0.1,h:3.5},{x:-14,y:-0.1,h:3.5},{x:-7,y:-0.1,h:3.5}, {x:0,y:-0.1,h:3.5}, {x:7,y:-0.1,h:3.5},{x:14,y:-0.1,h:3.5},{x:21,y:-0.1,h:3.5},{x:28,y:-0.1,h:2},{x:35,y:-0.1,h:2} ];
     function clampToWall(x,y){ const hw=WALL.width/2, hh=WALL.height/2; return { x:THREE.MathUtils.clamp(x,-hw+0.01,hw-0.01), y:THREE.MathUtils.clamp(y,-hh+0.01,hh-0.01) }; }
 
     // Carga de datos para cards
